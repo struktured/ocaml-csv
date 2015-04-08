@@ -353,8 +353,10 @@ let rec examine_quoted_field ic field_no after_quote i =
   )
   else
     let c = String.unsafe_get ic.in_buf i in
+    let c_prev = String.unsafe_get ic.in_buf (i-1) in
+    let c_prev' = String.unsafe_get ic.in_buf (i-2) in
     if !after_quote then (
-      if c = '\"' then (
+      if c = '"' && (c_prev != '\\' || c_prev = '\\' && c_prev' = '\\')  then (
         after_quote := false;
         (* [c] is kept so a quote will be included in the field *)
         examine_quoted_field ic field_no after_quote (i+1)
@@ -372,7 +374,7 @@ let rec examine_quoted_field ic field_no after_quote i =
       )
       else raise(Failure(ic.record_n, field_no, "Bad '\"' in quoted field"))
     )
-    else if c = '\"' then (
+    else if c = '"' && (c_prev != '\\' || c_prev = '\\' && c_prev' = '\\') then (
       after_quote := true;
       (* Save the field so far, without the quote *)
       Buffer.add_substring ic.current_field ic.in_buf ic.in0 (i - ic.in0);
@@ -418,7 +420,9 @@ let add_next_field ic field_no =
     skip_spaces ic;
     (* Now, in0 < in1 or End_of_file was raised *)
     let c = String.unsafe_get ic.in_buf ic.in0 in
-    if c = '\"' then (
+    let c_prev = String.unsafe_get ic.in_buf (ic.in0-1) in
+    if c = '"' (*&& c_prev != '\\' && (ic.record = [] || (List.hd ic.record) !=
+                 "\\") *) then (
       ic.in0 <- ic.in0 + 1;
       add_quoted_field ic field_no
     )
@@ -426,7 +430,7 @@ let add_next_field ic field_no =
       ic.in0 <- ic.in0 + 1; (* mark '=' as read *)
       try
         fill_in_buf ic;
-        if String.unsafe_get ic.in_buf ic.in0 = '\"' then (
+        if String.unsafe_get ic.in_buf ic.in0 = '"' then (
           (* Excel trick ="..." to prevent spaces around the field
              to be removed. *)
           ic.in0 <- ic.in0 + 1; (* skip '"' *)
